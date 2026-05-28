@@ -37,6 +37,18 @@ const SURE_NAMES = {
   111:"Tebbet",112:"Ihlas",113:"Felak",114:"Nas"
 };
 
+// Hadis kitapları
+const HADIS_KITAPLARI = {
+  "buhari":   { tur: "tur-bukhari",   ara: "ara-bukhari",   isim: "Sahih-i Buhari",   renk: 0x1abc9c },
+  "muslim":   { tur: "tur-muslim",    ara: "ara-muslim",    isim: "Sahih-i Muslim",    renk: 0x3498db },
+  "ebudavud": { tur: "tur-abudawud",  ara: "ara-abudawud",  isim: "Ebu Davud",         renk: 0x9b59b6 },
+  "tirmizi":  { tur: "tur-tirmidhi",  ara: "ara-tirmidhi",  isim: "Tirmizi",           renk: 0xe67e22 },
+  "nesai":    { tur: "tur-nasai",     ara: "ara-nasai",     isim: "Nesai",             renk: 0xe74c3c },
+  "ibnmace":  { tur: "tur-ibnmajah",  ara: "ara-ibnmajah",  isim: "Ibn Mace",          renk: 0xf39c12 },
+};
+
+// ─── YARDIMCI FONKSİYONLAR ───────────────────────────────────────────────────
+
 function parseMuteDuration(args) {
   let totalMs = 0;
   let reasonParts = [];
@@ -75,9 +87,13 @@ function errorEmbed(msg) {
     .setTimestamp();
 }
 
+// ─── BOT HAZIR ───────────────────────────────────────────────────────────────
+
 client.once("ready", () => {
   console.log("Bot aktif: " + client.user.tag);
 });
+
+// ─── MESAJ DİNLEYİCİ ─────────────────────────────────────────────────────────
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
@@ -86,9 +102,9 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const command = args.shift().toLowerCase();
 
-  // ══════════════════════════════════════════
-  // KURAN: *2:255
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+  // KUR'AN: *2:255
+  // ══════════════════════════════════════════════════════
   const ayetMatch = command.match(/^(\d+):(\d+)$/);
   if (ayetMatch) {
     const sureNo = parseInt(ayetMatch[1]);
@@ -108,7 +124,7 @@ client.on("messageCreate", async (message) => {
       const embed = new EmbedBuilder()
         .setColor(0x1a6b3c)
         .setAuthor({ name: "📖  Kur'an-ı Kerim" })
-        .setTitle("**" + (SURE_NAMES[sureNo] || sureNo + ". Sure") + " Suresi  —  " + ayetNo + ". Ayet**")
+        .setTitle("**" + (SURE_NAMES[sureNo] || sureNo + ". Sure") + " Suresi — " + ayetNo + ". Ayet**")
         .setDescription(">>> **" + td.data.text + "**")
         .addFields({ name: "🕌  Arapça", value: "```" + ad.data.text + "```" })
         .setFooter({ text: "Kur'an " + sureNo + ":" + ayetNo + "  •  alquran.cloud" })
@@ -119,9 +135,57 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
+  // HADİS: *buhari 1 / *muslim 45 / *tirmizi 10 ...
+  // ══════════════════════════════════════════════════════
+  if (HADIS_KITAPLARI[command]) {
+    const kitap = HADIS_KITAPLARI[command];
+    const hadisNo = parseInt(args[0]);
+
+    if (isNaN(hadisNo) || hadisNo < 1)
+      return message.reply({ embeds: [errorEmbed("**Geçerli bir hadis numarası gir.**\nKullanım: `*" + command + " 1`")] });
+
+    try {
+      const [turRes, araRes] = await Promise.all([
+        fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/${kitap.tur}/${hadisNo}.json`),
+        fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/${kitap.ara}/${hadisNo}.json`)
+      ]);
+
+      if (!turRes.ok)
+        return message.reply({ embeds: [errorEmbed("**Hadis bulunamadı.** Numara doğru mu kontrol et.")] });
+
+      const turData = await turRes.json();
+      const araData = araRes.ok ? await araRes.json() : null;
+
+      const turMetin = turData.hadiths?.[0]?.text || turData.hadith?.[0]?.text || "Metin bulunamadı.";
+      const araMetin = araData ? (araData.hadiths?.[0]?.text || araData.hadith?.[0]?.text || null) : null;
+
+      // Uzun metinleri kısalt
+      const kisaltilmisTur = turMetin.length > 900 ? turMetin.slice(0, 900) + "..." : turMetin;
+      const kisaltilmisAra = araMetin ? (araMetin.length > 400 ? araMetin.slice(0, 400) + "..." : araMetin) : null;
+
+      const embed = new EmbedBuilder()
+        .setColor(kitap.renk)
+        .setAuthor({ name: "📚  Kütübü Sitte" })
+        .setTitle("**" + kitap.isim + " — " + hadisNo + ". Hadis**")
+        .setDescription(">>> **" + kisaltilmisTur + "**")
+        .setFooter({ text: kitap.isim + " No: " + hadisNo + "  •  fawazahmed0/hadith-api" })
+        .setTimestamp();
+
+      if (kisaltilmisAra) {
+        embed.addFields({ name: "🕌  Arapça", value: "```" + kisaltilmisAra + "```" });
+      }
+
+      return message.reply({ embeds: [embed] });
+    } catch (err) {
+      console.error(err);
+      return message.reply({ embeds: [errorEmbed("**Bir hata oluştu.** Lütfen tekrar dene.")] });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════
   // BAN
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   if (command === "ban") {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers))
       return message.reply({ embeds: [errorEmbed("**Ban Üyeleri** yetkisine ihtiyacın var.")] });
@@ -135,7 +199,7 @@ client.on("messageCreate", async (message) => {
       await target.ban({ reason });
       const embed = new EmbedBuilder()
         .setColor(0xff2222)
-        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONU", iconURL: message.guild.iconURL() })
         .setTitle("🔨  Kullanıcı Banlandı")
         .setDescription(">>> **" + target.user.tag + "** sunucudan kalıcı olarak uzaklaştırıldı.")
         .addFields(
@@ -152,9 +216,9 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   // KICK
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   if (command === "kick") {
     if (!message.member.permissions.has(PermissionFlagsBits.KickMembers))
       return message.reply({ embeds: [errorEmbed("**Üye At** yetkisine ihtiyacın var.")] });
@@ -168,7 +232,7 @@ client.on("messageCreate", async (message) => {
       await target.kick(reason);
       const embed = new EmbedBuilder()
         .setColor(0xff8800)
-        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONU", iconURL: message.guild.iconURL() })
         .setTitle("👢  Kullanıcı Atıldı")
         .setDescription(">>> **" + target.user.tag + "** sunucudan atıldı.")
         .addFields(
@@ -185,9 +249,9 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   // MUTE
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   if (command === "mute") {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
       return message.reply({ embeds: [errorEmbed("**Üyeleri Sustur** yetkisine ihtiyacın var.")] });
@@ -202,7 +266,7 @@ client.on("messageCreate", async (message) => {
       await target.timeout(finalMs, reason);
       const embed = new EmbedBuilder()
         .setColor(0xffcc00)
-        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONU", iconURL: message.guild.iconURL() })
         .setTitle("🔇  Kullanıcı Susturuldu")
         .setDescription(">>> **" + target.user.tag + "** geçici olarak susturuldu.")
         .addFields(
@@ -221,9 +285,9 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   // UNMUTE
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   if (command === "unmute") {
     if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
       return message.reply({ embeds: [errorEmbed("**Üyeleri Sustur** yetkisine ihtiyacın var.")] });
@@ -234,7 +298,7 @@ client.on("messageCreate", async (message) => {
       await target.timeout(null);
       const embed = new EmbedBuilder()
         .setColor(0x2ecc71)
-        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONU", iconURL: message.guild.iconURL() })
         .setTitle("🔊  Susturma Kaldırıldı")
         .setDescription(">>> **" + target.user.tag + "** artık konuşabilir.")
         .addFields(
@@ -249,9 +313,9 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   // TEMİZLE
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   if (command === "temizle") {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
       return message.reply({ embeds: [errorEmbed("**Mesajları Yönet** yetkisine ihtiyacın var.")] });
@@ -274,9 +338,9 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   // YARDIM
-  // ══════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   if (command === "yardım" || command === "yardim") {
     const embed = new EmbedBuilder()
       .setColor(0x7289da)
@@ -284,12 +348,21 @@ client.on("messageCreate", async (message) => {
       .setTitle("📜  Tüm Komutlar")
       .setDescription("Prefix: **`*`**")
       .addFields(
-        { name: "📖  Kur'an", value: "**`*sure:ayet`** — Ayet ve Arapçasını göster\n> Örnek: `*2:255`" },
-        { name: "🔨  Ban", value: "**`*ban @kullanıcı [sebep]`**\n> Kullanıcıyı kalıcı olarak banlar" },
-        { name: "👢  Kick", value: "**`*kick @kullanıcı [sebep]`**\n> Kullanıcıyı sunucudan atar" },
+        { name: "📖  Kur'an-ı Kerim", value: "**`*sure:ayet`** — Türkçe meal + Arapça\n> Örnek: `*2:255`" },
+        { name: "📚  Kütübü Sitte", value: [
+          "**`*buhari [no]`** — Sahih-i Buhari",
+          "**`*muslim [no]`** — Sahih-i Muslim",
+          "**`*ebudavud [no]`** — Ebu Davud",
+          "**`*tirmizi [no]`** — Tirmizi",
+          "**`*nesai [no]`** — Nesai",
+          "**`*ibnmace [no]`** — İbn Mace",
+          "> Örnek: `*buhari 1`"
+        ].join("\n") },
+        { name: "🔨  Ban", value: "**`*ban @kullanıcı [sebep]`**" },
+        { name: "👢  Kick", value: "**`*kick @kullanıcı [sebep]`**" },
         { name: "🔇  Mute", value: "**`*mute @kullanıcı [Xgün] [Xsaat] [Xdakika] [sebep]`**\n> Örnek: `*mute @ali 1 gün 30 dakika spam`" },
-        { name: "🔊  Unmute", value: "**`*unmute @kullanıcı`**\n> Susturmayı kaldırır" },
-        { name: "🗑️  Temizle", value: "**`*temizle [sayı]`**\n> Maksimum 100 mesaj siler" }
+        { name: "🔊  Unmute", value: "**`*unmute @kullanıcı`**" },
+        { name: "🗑️  Temizle", value: "**`*temizle [sayı]`** — Maksimum 100 mesaj" }
       )
       .setFooter({ text: "İbni Java Bot  •  Tüm hakları saklıdır" })
       .setTimestamp();
@@ -298,4 +371,4 @@ client.on("messageCreate", async (message) => {
 });
 
 client.login(process.env.discordtoken);
-      
+              
