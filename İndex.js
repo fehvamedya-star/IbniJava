@@ -37,32 +37,21 @@ const SURE_NAMES = {
   111:"Tebbet",112:"Ihlas",113:"Felak",114:"Nas"
 };
 
-// ─── YARDIMCI FONKSİYONLAR ───────────────────────────────────────────────────
-
 function parseMuteDuration(args) {
   let totalMs = 0;
   let reasonParts = [];
   let i = 0;
-
   while (i < args.length) {
     const num = parseInt(args[i]);
     if (!isNaN(num) && args[i + 1]) {
       const unit = args[i + 1].toLowerCase();
-      if (unit === "gun" || unit === "gün" || unit === "g") {
-        totalMs += num * 24 * 60 * 60 * 1000;
-        i += 2; continue;
-      } else if (unit === "saat" || unit === "s") {
-        totalMs += num * 60 * 60 * 1000;
-        i += 2; continue;
-      } else if (unit === "dakika" || unit === "dk" || unit === "d") {
-        totalMs += num * 60 * 1000;
-        i += 2; continue;
-      }
+      if (["gun", "gün", "g"].includes(unit)) { totalMs += num * 24 * 60 * 60 * 1000; i += 2; continue; }
+      if (["saat", "s"].includes(unit)) { totalMs += num * 60 * 60 * 1000; i += 2; continue; }
+      if (["dakika", "dk", "d"].includes(unit)) { totalMs += num * 60 * 1000; i += 2; continue; }
     }
     reasonParts.push(args[i]);
     i++;
   }
-
   return { totalMs, reason: reasonParts.join(" ") || "Sebep belirtilmedi" };
 }
 
@@ -72,35 +61,23 @@ function formatDuration(ms) {
   const hours = Math.floor((ms % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
   const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
   let parts = [];
-  if (days > 0) parts.push(days + " gun");
-  if (hours > 0) parts.push(hours + " saat");
-  if (minutes > 0) parts.push(minutes + " dakika");
-  return parts.length > 0 ? parts.join(" ") : "1 dakikadan az";
+  if (days > 0) parts.push("**" + days + " gün**");
+  if (hours > 0) parts.push("**" + hours + " saat**");
+  if (minutes > 0) parts.push("**" + minutes + " dakika**");
+  return parts.length > 0 ? parts.join(" ") : "**1 dakikadan az**";
 }
 
 function errorEmbed(msg) {
   return new EmbedBuilder()
-    .setColor(0xff4444)
-    .setDescription("❌  " + msg)
+    .setColor(0xff2222)
+    .setTitle("❌  Hata")
+    .setDescription(">>> " + msg)
     .setTimestamp();
 }
-
-function successEmbed(title, fields, color) {
-  const embed = new EmbedBuilder()
-    .setColor(color || 0x2ecc71)
-    .setTitle(title)
-    .setTimestamp();
-  if (fields) fields.forEach(f => embed.addFields(f));
-  return embed;
-}
-
-// ─── BOT HAZIR ───────────────────────────────────────────────────────────────
 
 client.once("ready", () => {
   console.log("Bot aktif: " + client.user.tag);
 });
-
-// ─── MESAJ DINLEYICI ─────────────────────────────────────────────────────────
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
@@ -109,252 +86,216 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
   const command = args.shift().toLowerCase();
 
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   // KURAN: *2:255
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   const ayetMatch = command.match(/^(\d+):(\d+)$/);
   if (ayetMatch) {
     const sureNo = parseInt(ayetMatch[1]);
     const ayetNo = parseInt(ayetMatch[2]);
-
-    if (sureNo < 1 || sureNo > 114) {
-      return message.reply({ embeds: [errorEmbed("Sure numarasi 1-114 arasinda olmalidir.")] });
-    }
-
+    if (sureNo < 1 || sureNo > 114)
+      return message.reply({ embeds: [errorEmbed("**Sure numarası 1 ile 114 arasında olmalıdır.**")] });
     try {
-      const [turkceRes, arabicRes] = await Promise.all([
+      const [t, a] = await Promise.all([
         fetch(`https://api.alquran.cloud/v1/ayah/${sureNo}:${ayetNo}/tr.diyanet`),
         fetch(`https://api.alquran.cloud/v1/ayah/${sureNo}:${ayetNo}/quran-uthmani`)
       ]);
-      const turkceData = await turkceRes.json();
-      const arabicData = await arabicRes.json();
-
-      if (turkceData.status !== "OK" || arabicData.status !== "OK") {
-        return message.reply({ embeds: [errorEmbed("Ayet bulunamadi. Numara kontrolu yapiniz.")] });
-      }
+      const td = await t.json();
+      const ad = await a.json();
+      if (td.status !== "OK" || ad.status !== "OK")
+        return message.reply({ embeds: [errorEmbed("**Ayet bulunamadı.** Sure veya ayet numarasını kontrol et.")] });
 
       const embed = new EmbedBuilder()
         .setColor(0x1a6b3c)
-        .setAuthor({ name: "Kuran-i Kerim", iconURL: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14/assets/72x72/1f4d6.png" })
-        .setTitle("📖  " + (SURE_NAMES[sureNo] || sureNo + ". Sure") + " Suresi  —  " + ayetNo + ". Ayet")
-        .setDescription("> " + turkceData.data.text)
-        .addFields({ name: "🕌  Arapca", value: "```" + arabicData.data.text + "```" })
-        .setFooter({ text: "Kuran " + sureNo + ":" + ayetNo + "  •  alquran.cloud" })
+        .setAuthor({ name: "📖  Kur'an-ı Kerim" })
+        .setTitle("**" + (SURE_NAMES[sureNo] || sureNo + ". Sure") + " Suresi  —  " + ayetNo + ". Ayet**")
+        .setDescription(">>> **" + td.data.text + "**")
+        .addFields({ name: "🕌  Arapça", value: "```" + ad.data.text + "```" })
+        .setFooter({ text: "Kur'an " + sureNo + ":" + ayetNo + "  •  alquran.cloud" })
         .setTimestamp();
-
       return message.reply({ embeds: [embed] });
     } catch (err) {
-      console.error(err);
-      return message.reply({ embeds: [errorEmbed("Bir hata olustu. Tekrar dene.")] });
+      return message.reply({ embeds: [errorEmbed("**Bir hata oluştu.** Lütfen tekrar dene.")] });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   // BAN
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   if (command === "ban") {
-    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return message.reply({ embeds: [errorEmbed("Bu komutu kullanmak icin **Ban Uyeleri** yetkisine ihtiyacin var.")] });
-    }
-
+    if (!message.member.permissions.has(PermissionFlagsBits.BanMembers))
+      return message.reply({ embeds: [errorEmbed("**Ban Üyeleri** yetkisine ihtiyacın var.")] });
     const target = message.mentions.members.first();
-    if (!target) return message.reply({ embeds: [errorEmbed("Bir kullanici etiketle.  Ornek: `*ban @kullanici sebep`")] });
-
-    if (!target.bannable) {
-      return message.reply({ embeds: [errorEmbed("Bu kullaniciyi banlayamam. Yetki hiyerarsisini kontrol et.")] });
-    }
-
+    if (!target)
+      return message.reply({ embeds: [errorEmbed("**Bir kullanıcı etiketle.**\nKullanım: `*ban @kullanıcı sebep`")] });
+    if (!target.bannable)
+      return message.reply({ embeds: [errorEmbed("**Bu kullanıcıyı banlayamam.** Yetki hiyerarşisini kontrol et.")] });
     const reason = args.slice(1).join(" ") || "Sebep belirtilmedi";
-
     try {
       await target.ban({ reason });
-
       const embed = new EmbedBuilder()
         .setColor(0xff2222)
-        .setAuthor({ name: "BANLANMA KARARI", iconURL: message.guild.iconURL() })
-        .setTitle("🔨  " + target.user.tag + " sunucudan banlandı")
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setTitle("🔨  Kullanıcı Banlandı")
+        .setDescription(">>> **" + target.user.tag + "** sunucudan kalıcı olarak uzaklaştırıldı.")
         .addFields(
-          { name: "👤  Kullanici", value: target.user.tag + "\n`" + target.user.id + "`", inline: true },
-          { name: "👮  Yetkili", value: message.author.tag, inline: true },
-          { name: "📋  Sebep", value: reason }
+          { name: "👤  Kullanıcı", value: "**" + target.user.tag + "**\n`" + target.user.id + "`", inline: true },
+          { name: "👮  Yetkili", value: "**" + message.author.tag + "**", inline: true },
+          { name: "📋  Sebep", value: "**" + reason + "**" }
         )
         .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: "Ban islemi tamamlandi" })
+        .setFooter({ text: "Ban işlemi tamamlandı" })
         .setTimestamp();
-
       return message.channel.send({ embeds: [embed] });
     } catch (err) {
-      return message.reply({ embeds: [errorEmbed("Ban islemi sirasinda hata olustu.")] });
+      return message.reply({ embeds: [errorEmbed("**Ban işlemi sırasında hata oluştu.**")] });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   // KICK
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   if (command === "kick") {
-    if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
-      return message.reply({ embeds: [errorEmbed("Bu komutu kullanmak icin **Uye At** yetkisine ihtiyacin var.")] });
-    }
-
+    if (!message.member.permissions.has(PermissionFlagsBits.KickMembers))
+      return message.reply({ embeds: [errorEmbed("**Üye At** yetkisine ihtiyacın var.")] });
     const target = message.mentions.members.first();
-    if (!target) return message.reply({ embeds: [errorEmbed("Bir kullanici etiketle.  Ornek: `*kick @kullanici sebep`")] });
-
-    if (!target.kickable) {
-      return message.reply({ embeds: [errorEmbed("Bu kullaniciyi atamaiyorum. Yetki hiyerarsisini kontrol et.")] });
-    }
-
+    if (!target)
+      return message.reply({ embeds: [errorEmbed("**Bir kullanıcı etiketle.**\nKullanım: `*kick @kullanıcı sebep`")] });
+    if (!target.kickable)
+      return message.reply({ embeds: [errorEmbed("**Bu kullanıcıyı atamıyorum.** Yetki hiyerarşisini kontrol et.")] });
     const reason = args.slice(1).join(" ") || "Sebep belirtilmedi";
-
     try {
       await target.kick(reason);
-
       const embed = new EmbedBuilder()
         .setColor(0xff8800)
-        .setAuthor({ name: "ATILMA KARARI", iconURL: message.guild.iconURL() })
-        .setTitle("👢  " + target.user.tag + " sunucudan atıldı")
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setTitle("👢  Kullanıcı Atıldı")
+        .setDescription(">>> **" + target.user.tag + "** sunucudan atıldı.")
         .addFields(
-          { name: "👤  Kullanici", value: target.user.tag + "\n`" + target.user.id + "`", inline: true },
-          { name: "👮  Yetkili", value: message.author.tag, inline: true },
-          { name: "📋  Sebep", value: reason }
+          { name: "👤  Kullanıcı", value: "**" + target.user.tag + "**\n`" + target.user.id + "`", inline: true },
+          { name: "👮  Yetkili", value: "**" + message.author.tag + "**", inline: true },
+          { name: "📋  Sebep", value: "**" + reason + "**" }
         )
         .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: "Kick islemi tamamlandi" })
+        .setFooter({ text: "Kick işlemi tamamlandı" })
         .setTimestamp();
-
       return message.channel.send({ embeds: [embed] });
     } catch (err) {
-      return message.reply({ embeds: [errorEmbed("Kick islemi sirasinda hata olustu.")] });
+      return message.reply({ embeds: [errorEmbed("**Kick işlemi sırasında hata oluştu.**")] });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // MUTE  →  *mute @kullanici 1 gun 2 saat 30 dakika sebep
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
+  // MUTE
+  // ══════════════════════════════════════════
   if (command === "mute") {
-    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      return message.reply({ embeds: [errorEmbed("Bu komutu kullanmak icin **Uyeleri Sustur** yetkisine ihtiyacin var.")] });
-    }
-
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
+      return message.reply({ embeds: [errorEmbed("**Üyeleri Sustur** yetkisine ihtiyacın var.")] });
     const target = message.mentions.members.first();
-    if (!target) return message.reply({ embeds: [errorEmbed("Bir kullanici etiketle.  Ornek: `*mute @kullanici 1 gun sebep`")] });
-
-    if (!target.moderatable) {
-      return message.reply({ embeds: [errorEmbed("Bu kullaniciyi susturamam. Yetki hiyerarsisini kontrol et.")] });
-    }
-
-    const durationArgs = args.slice(1);
-    const { totalMs, reason } = parseMuteDuration(durationArgs);
-
-    const maxMs = 28 * 24 * 60 * 60 * 1000; // Discord max 28 gun
-    const finalMs = Math.min(totalMs > 0 ? totalMs : 10 * 60 * 1000, maxMs);
-
+    if (!target)
+      return message.reply({ embeds: [errorEmbed("**Bir kullanıcı etiketle.**\nKullanım: `*mute @kullanıcı 1 gün 30 dakika sebep`")] });
+    if (!target.moderatable)
+      return message.reply({ embeds: [errorEmbed("**Bu kullanıcıyı susturamam.** Yetki hiyerarşisini kontrol et.")] });
+    const { totalMs, reason } = parseMuteDuration(args.slice(1));
+    const finalMs = Math.min(totalMs > 0 ? totalMs : 10 * 60 * 1000, 28 * 24 * 60 * 60 * 1000);
     try {
       await target.timeout(finalMs, reason);
-
       const embed = new EmbedBuilder()
         .setColor(0xffcc00)
-        .setAuthor({ name: "SUSTURMA KARARI", iconURL: message.guild.iconURL() })
-        .setTitle("🔇  " + target.user.tag + " susturuldu")
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setTitle("🔇  Kullanıcı Susturuldu")
+        .setDescription(">>> **" + target.user.tag + "** geçici olarak susturuldu.")
         .addFields(
-          { name: "👤  Kullanici", value: target.user.tag + "\n`" + target.user.id + "`", inline: true },
-          { name: "👮  Yetkili", value: message.author.tag, inline: true },
-          { name: "⏱️  Sure", value: formatDuration(finalMs), inline: true },
-          { name: "📅  Bitis", value: "<t:" + Math.floor((Date.now() + finalMs) / 1000) + ":R>", inline: true },
-          { name: "📋  Sebep", value: reason }
+          { name: "👤  Kullanıcı", value: "**" + target.user.tag + "**\n`" + target.user.id + "`", inline: true },
+          { name: "👮  Yetkili", value: "**" + message.author.tag + "**", inline: true },
+          { name: "⏱️  Süre", value: formatDuration(finalMs), inline: true },
+          { name: "📅  Bitiş", value: "<t:" + Math.floor((Date.now() + finalMs) / 1000) + ":R>", inline: true },
+          { name: "📋  Sebep", value: "**" + reason + "**" }
         )
         .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: "Mute islemi tamamlandi" })
+        .setFooter({ text: "Mute işlemi tamamlandı" })
         .setTimestamp();
-
       return message.channel.send({ embeds: [embed] });
     } catch (err) {
-      return message.reply({ embeds: [errorEmbed("Mute islemi sirasinda hata olustu.")] });
+      return message.reply({ embeds: [errorEmbed("**Mute işlemi sırasında hata oluştu.**")] });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   // UNMUTE
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   if (command === "unmute") {
-    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      return message.reply({ embeds: [errorEmbed("Bu komutu kullanmak icin **Uyeleri Sustur** yetkisine ihtiyacin var.")] });
-    }
-
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers))
+      return message.reply({ embeds: [errorEmbed("**Üyeleri Sustur** yetkisine ihtiyacın var.")] });
     const target = message.mentions.members.first();
-    if (!target) return message.reply({ embeds: [errorEmbed("Bir kullanici etiketle.  Ornek: `*unmute @kullanici`")] });
-
+    if (!target)
+      return message.reply({ embeds: [errorEmbed("**Bir kullanıcı etiketle.**\nKullanım: `*unmute @kullanıcı`")] });
     try {
       await target.timeout(null);
-
       const embed = new EmbedBuilder()
         .setColor(0x2ecc71)
-        .setTitle("🔊  " + target.user.tag + " susturma kaldirildi")
+        .setAuthor({ name: "⚖️  SUNUCU MODERASYONu", iconURL: message.guild.iconURL() })
+        .setTitle("🔊  Susturma Kaldırıldı")
+        .setDescription(">>> **" + target.user.tag + "** artık konuşabilir.")
         .addFields(
-          { name: "👤  Kullanici", value: target.user.tag, inline: true },
-          { name: "👮  Yetkili", value: message.author.tag, inline: true }
+          { name: "👤  Kullanıcı", value: "**" + target.user.tag + "**", inline: true },
+          { name: "👮  Yetkili", value: "**" + message.author.tag + "**", inline: true }
         )
         .setThumbnail(target.user.displayAvatarURL({ dynamic: true }))
         .setTimestamp();
-
       return message.channel.send({ embeds: [embed] });
     } catch (err) {
-      return message.reply({ embeds: [errorEmbed("Unmute islemi sirasinda hata olustu.")] });
+      return message.reply({ embeds: [errorEmbed("**Unmute işlemi sırasında hata oluştu.**")] });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   // TEMİZLE
-  // ═══════════════════════════════════════════════════════════
-  if (command === "temizle" || command === "clear") {
-    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-      return message.reply({ embeds: [errorEmbed("Bu komutu kullanmak icin **Mesajlari Yonet** yetkisine ihtiyacin var.")] });
-    }
-
+  // ══════════════════════════════════════════
+  if (command === "temizle") {
+    if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
+      return message.reply({ embeds: [errorEmbed("**Mesajları Yönet** yetkisine ihtiyacın var.")] });
     const amount = parseInt(args[0]);
-    if (isNaN(amount) || amount < 1 || amount > 100) {
-      return message.reply({ embeds: [errorEmbed("1 ile 100 arasinda bir sayi gir.  Ornek: `*temizle 10`")] });
-    }
-
+    if (isNaN(amount) || amount < 1 || amount > 100)
+      return message.reply({ embeds: [errorEmbed("**1 ile 100 arasında bir sayı gir.**\nKullanım: `*temizle 10`")] });
     try {
       await message.delete();
       const deleted = await message.channel.bulkDelete(amount, true);
-
       const embed = new EmbedBuilder()
         .setColor(0x3498db)
-        .setTitle("🗑️  Mesajlar Silindi")
-        .setDescription(deleted.size + " mesaj basariyla silindi.")
-        .addFields({ name: "👮  Yetkili", value: message.author.tag, inline: true })
+        .setTitle("🗑️  Mesajlar Temizlendi")
+        .setDescription(">>> **" + deleted.size + " mesaj** başarıyla silindi.")
+        .addFields({ name: "👮  Yetkili", value: "**" + message.author.tag + "**", inline: true })
         .setTimestamp();
-
       const reply = await message.channel.send({ embeds: [embed] });
       setTimeout(() => reply.delete().catch(() => {}), 4000);
     } catch (err) {
-      return message.channel.send({ embeds: [errorEmbed("Mesaj silme islemi sirasinda hata olustu. (14 gunden eski mesajlar silinemez)")] });
+      return message.channel.send({ embeds: [errorEmbed("**Mesaj silme sırasında hata oluştu.**\n14 günden eski mesajlar toplu silinemez.")] });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════
   // YARDIM
-  // ═══════════════════════════════════════════════════════════
-  if (command === "yardim" || command === "help") {
+  // ══════════════════════════════════════════
+  if (command === "yardım" || command === "yardim") {
     const embed = new EmbedBuilder()
       .setColor(0x7289da)
-      .setAuthor({ name: client.user.tag + " — Komut Listesi", iconURL: client.user.displayAvatarURL() })
-      .setTitle("📜  Tum Komutlar")
+      .setAuthor({ name: client.user.tag + "  —  Komut Listesi", iconURL: client.user.displayAvatarURL() })
+      .setTitle("📜  Tüm Komutlar")
+      .setDescription("Prefix: **`*`**")
       .addFields(
-        { name: "📖  Kuran", value: "`*sure:ayet` — Ayet goster\nOrnek: `*2:255`" },
-        { name: "🔨  Ban", value: "`*ban @kullanici [sebep]`" },
-        { name: "👢  Kick", value: "`*kick @kullanici [sebep]`" },
-        { name: "🔇  Mute", value: "`*mute @kullanici [Xgun] [Xsaat] [Xdakika] [sebep]`\nOrnek: `*mute @ali 1 gun 30 dakika spam`" },
-        { name: "🔊  Unmute", value: "`*unmute @kullanici`" },
-        { name: "🗑️  Temizle", value: "`*temizle [sayi]` — Max 100 mesaj" }
+        { name: "📖  Kur'an", value: "**`*sure:ayet`** — Ayet ve Arapçasını göster\n> Örnek: `*2:255`" },
+        { name: "🔨  Ban", value: "**`*ban @kullanıcı [sebep]`**\n> Kullanıcıyı kalıcı olarak banlar" },
+        { name: "👢  Kick", value: "**`*kick @kullanıcı [sebep]`**\n> Kullanıcıyı sunucudan atar" },
+        { name: "🔇  Mute", value: "**`*mute @kullanıcı [Xgün] [Xsaat] [Xdakika] [sebep]`**\n> Örnek: `*mute @ali 1 gün 30 dakika spam`" },
+        { name: "🔊  Unmute", value: "**`*unmute @kullanıcı`**\n> Susturmayı kaldırır" },
+        { name: "🗑️  Temizle", value: "**`*temizle [sayı]`**\n> Maksimum 100 mesaj siler" }
       )
-      .setFooter({ text: "Prefix: *" })
+      .setFooter({ text: "İbni Java Bot  •  Tüm hakları saklıdır" })
       .setTimestamp();
-
     return message.reply({ embeds: [embed] });
   }
 });
 
 client.login(process.env.discordtoken);
-    
+      
